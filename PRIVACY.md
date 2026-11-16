@@ -2,7 +2,7 @@
 
 lot-map is a mod for Claude Code that draws a map of the work in a pane beside the chat. It runs inside Claude Code on your computer. There is no lot-map service, no account and no server: nothing the mod sees leaves your machine through it.
 
-This page describes version 0.8.0. It changes only together with the code, and the [changelog](CHANGELOG.md) says when it did.
+This page describes version 0.9.0. It changes only together with the code, and the [changelog](CHANGELOG.md) says when it did.
 
 ## What the mod is handed
 
@@ -21,11 +21,11 @@ The mod does not look for personal data and has no use for it. It takes a name f
 - a hook's refusal: the name of the tool it stopped, and its first line only if you turn `hookReasons` on;
 - context a hook added: that it was added, and record numbers only if you turn `hookRecords` on.
 
-The mod asks for one thing by itself: the environment variable `COLORFGBG`, and only with `terminalView` set to `picture` or `braille` and `theme` on `auto`. It holds the terminal's colour numbers, by which the map above the rows is painted light or dark. The mod keeps that answer, light or dark, for the session and nothing else from it, and reads no other variable.
+The mod asks for three things by itself, all environment variables, and only for the map in a terminal. `COLORFGBG`, with `terminalView` set to `picture` or `braille` and `theme` on `auto`: it holds the terminal's colour numbers, by which the map above the rows is painted light or dark. `TERM_PROGRAM` and `LC_TERMINAL`, with `terminalView` set to `picture`: they name the terminal program, and in iTerm2 the picture stays off. The mod keeps the two answers for the session, light or dark and iTerm2 or not, and nothing else from them, and reads no other variable.
 
 ## What it keeps
 
-- **During a session:** the rows of the map, which of them you opened to read whole, the counters under the stations and the last model step, in Claude Code's state for the session. They are gone when the session ends.
+- **During a session:** the rows of the map, which of them you opened to read whole, the counters under the stations and the last model step, in Claude Code's state for the session. With `contextCost` on, also a number of tokens on a row and a sum per station: how much the context grew, taken from the same figure as the ring's percentage. They are gone when the session ends.
 - **Between sessions:** one value per folder, the name of the model last used there, so that the map can show a change of model. It is stored under the folder's full path in Claude Code's own store for the plugin, on your computer. A folder's path usually contains your account name.
 - **Between sessions, from the VS Code pane:** how far you zoomed the map out and whether you hid it, a number and a yes or no, the same for every folder. They are in the same store and say nothing of what the map showed.
 - **Your options** (language, colours, memory servers and the rest) are kept by Claude Code in your settings, as for any plugin.
