@@ -113,7 +113,7 @@ In iTerm2 the picture is off, and a line above the rows says so. iTerm2 keeps ev
 
 The mod paints the picture itself, from the same drawing as the desktop app's, with letters from the X.Org misc-fixed bitmap fonts, which are in the public domain; [FONTS.md](FONTS.md) says where they come from. It paints up to thirty frames a second while anything on the map moves. The core breathes in the picture only while something runs, smoothly for ten minutes after the map last changed and then a frame every five seconds; at rest the picture stands still once the trails have faded.
 
-With `theme` on `auto` the picture is light or dark by the terminal's `COLORFGBG`, which iTerm2, rxvt and Konsole set; where nothing says, it is dark, and on a light terminal that does not say, set `theme` to `light`. The picture has no background of its own, so the terminal's shows through it; where that is a shade off the pane's grey, it leaves a faint box around the map. `colors` with `background=#rrggbb` gives the picture a background of its own.
+With `theme` on `auto` the picture is light or dark by the terminal's `COLORFGBG`, which iTerm2, rxvt and Konsole set; where nothing says, it is dark, and on a light terminal that does not say, set `theme` to `light`. The picture has no background of its own, so the terminal's shows through it; where that is a shade off the pane's grey, it leaves a faint box around the map. `paneBackground` set to `transparent` takes the grey away, so the terminal shows behind the map and the rows alike, also where the terminal is see-through; set to the terminal's colour as `#rrggbb`, it paints the pane in it. `colors` with `background=#rrggbb` gives the picture a background of its own instead.
 
 Nor does a terminal say how tall its cells are. `cellShape` does: how many times taller a cell is than it is wide, 2.4 by default, as iTerm2 draws Monaco 12, and about 2 for Menlo in kitty. If the picture leaves an empty band below it, raise it; if the band is at its right, lower it.
 
@@ -138,12 +138,13 @@ What it does not draw, since a cell holds one colour and a dot is all the detail
 - the rings where a pulse lands and where the model changes;
 - pulses side by side: calls that start together fly as one, and `x3` says how many;
 - memory's second count, `↓`, of what a hook brought unasked: one number counts both;
+- a subagent's call leaving from the Agents station: every call flies from the centre;
 - the fading of a glow: a station is bright, and then it is not.
 
 Its colours are the map's own, as in the desktop app. `theme` and `colors` hold; under `auto` it is light or dark by `COLORFGBG`, as the picture is, and dark where nothing says, so on a light terminal that does not say, set `theme` to `light`. `background` means here what it means there:
 
 - `solid`, the default: the cells stand on the palette's background and the words take its text colour, so the map reads in any pane. The pane's own ground comes from Claude Code's theme, which the map cannot ask for; where that and the terminal differ, such as a light terminal under the dark theme, it is a light map in a dark pane, as the picture is.
-- `transparent`: the cells have no ground and the words take the terminal's own colour. Choose it where the terminal and Claude Code's theme agree: the map then sits in the pane with no box around it. Where they differ the words can hardly be read.
+- `transparent`: the cells have no ground and the words take the terminal's own colour. Choose it where the terminal and Claude Code's theme agree: the map then sits in the pane with no box around it. Where they differ the words can hardly be read. With `paneBackground` on `transparent` as well, the map and the pane both show the terminal behind them.
 
 `layout` turns the ring. With `motion` on `reduced` nothing flies, beats or circles: a call lights its station and its spoke, and the subagents stand beside theirs.
 
@@ -166,12 +167,15 @@ The install offers them on a screen. Later, use `/config` in a terminal or `clau
 | `memorySubcommands` | none | words after a memory command that the map may show, such as `add` or `search`; without them the command goes by its own name |
 | `memoryPaths` | none | parts of a path that make a file a memory |
 | `memoryLabels` | none | short names for memory tools, each as `tool=name` |
+| `serverStations` | none | put an MCP server's tools on a station of your choice, each as `server=station`, with `files`, `shell`, `web`, `browser`, `agents`, `skills` or `you`; the row still reads `server: tool`. What you set wins over the mod's own routes for the servers it knows. Memory keeps `memoryServers`, which wins if a server is in both; an unknown station is ignored |
 | `hookRecords` | `false` | turn on if a hook of yours adds memory records numbered like `[#123]`; they appear on Memory by number only. Such a number in the text of any hook counts, not only a memory hook's |
 | `hookReasons` | `false` | show the first line of a hook's refusal, up to 72 characters; off, the map says only which tool was stopped |
+| `guardedHooks` | `true` | turn off on a Team or Enterprise login where the transcript gets notices like `lot-map: its classic.PreToolUse hook was skipped`. An organisation's guard keeps mods away from five events there, and with this off the mod adds no hook on them. The map then loses the Hooks station, the records a hook adds, the row of a typed slash command and the mark of a compaction; a call a hook refused still gets its `✕`, as a failed call and not as a blocked one |
 | `subagentNames` | `false` | a subagent's model step says which subagent it is, by the few words it was started with, up to 40 characters; off, it says only that it is a subagent |
 | `contextCost` | `false` | each row says about how many tokens the context grew by with its call's answer, and the desktop map adds each station's sum to its count. An estimate, shown one step late; see [What each call adds to the context](#what-each-call-adds-to-the-context) |
 | `theme` | `auto` | the map's colours: `dark`, `light`, or `auto`, which is dark on a dark surface and light on a light one |
 | `background` | `solid` | the map's own background, or `transparent`, which lets the pane behind it show through. The rim around the labels keeps the background's colour, so on a surface of another shade it shows as a faint halo |
+| `paneBackground` | `theme` | what the pane itself is painted with: `theme`, Claude Code's own; `transparent`, which lets the terminal behind it show through, wallpaper and blur included; or a colour as `#rrggbb`, to match an opaque terminal. A surface that cannot do it keeps its own. See [In a terminal](#in-a-terminal) |
 | `colors` | none | colours of your own, each as `name=#rrggbb`; see [Colours of your own](#colours-of-your-own) |
 | `layout` | `you-top` | where you are on the map: `you-top`, or `you-bottom`, which turns the ring half a turn so that you are at the bottom and the network and the browser at the top |
 | `motion` | `full` | `full`, or `reduced`: nothing flies, spreads or spins. A call still lights its station and flashes its spoke, the route still gets its leg, and those only fade; the clock hands around a running station stay, as slow as a clock's |
@@ -253,7 +257,7 @@ Words live in `hooks/text.ts`; a new language is one more table there and one mo
 
 The terminal picture is painted by `hooks/raster.ts`, which reads the drawing `drawMap` makes. A test paints every kind of drawing and fails on anything the painter does not know, so a change to the drawing that needs more of SVG shows there first. Another, `the terminal picture's font has every letter the map writes, in every language`, names the letters a new language needs added to `hooks/font.ts`; [FONTS.md](FONTS.md) says how to make that file again.
 
-The braille map is drawn by `hooks/braille.ts`: a second drawing of the same board, which takes its stations from `STATIONS` and its timings from `hooks/draw.ts`. Tests in `hooks/braille.test.tsx` hold it to every station under both layouts, and one in `hooks/lot-map.test.tsx` to the names of every language. Something new on the map is either drawn there too or added to the list of what braille leaves out, in [In a terminal](#the-map-in-braille-dots).
+The braille map is drawn by `hooks/braille.ts`: a second drawing of the same board, which takes its stations from `STATIONS` and its timings from `hooks/draw.ts`. Tests in `hooks/braille.test.tsx` hold it to every station under both layouts, and one in `hooks/lot-map.test.tsx` to the names of every language. Something new on the map is either drawn there too or added to the list of what braille leaves out, in [In a terminal](#the-map-in-braille-dots): the `INVENTORY` in `hooks/braille.test.tsx` has a line for each thing the first drawing shows, a test holds both drawings to it, and `scripts/check-surface.mjs` holds that list to the same lines.
 
 Before you send a change, read [CONTRIBUTING.md](CONTRIBUTING.md). What the mod holds to, and the check behind each point, is in [PRINCIPLES.md](PRINCIPLES.md).
 

@@ -1,9 +1,10 @@
 import { expect, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 
 import type { Board } from '../types'
 import type { Entry } from '../types'
 import { paintBraille, rowsOf } from './braille'
-import { COLOR_NAMES, STATIONS, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, nowParts, routeOf, setupFrom, shortModel, taskNotice, taskOf } from './map'
+import { COLOR_NAMES, STATIONS, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, keepNewest, memoryIds, nowParts, routeOf, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import { hasGlyph } from './raster'
 import { stringsFor } from './text'
 
@@ -236,6 +237,37 @@ test('out of the box, memory is only what every install has', () => {
   expect(classify('mcp__memory__search_nodes', {}, STRANGER).label).toBe('search nodes')
 })
 
+test('serverStations puts a server on each station the person may name, and the row still reads server: tool', () => {
+  const put = (station: string) => setupFrom({ serverStations: [`srv=${station}`] })
+  for (const station of ['files', 'shell', 'web', 'browser', 'agents', 'skills', 'you']) {
+    expect(classify('mcp__srv__list_things', { query: 'private' }, put(station))).toEqual({ station, label: 'srv: list things' })
+  }
+  // A string works as well as a list, and the other servers stay where they were.
+  const two = setupFrom({ serverStations: 'srv=files, other = skills' })
+  expect(classify('mcp__srv__read', {}, two).station).toBe('files')
+  expect(classify('mcp__other__read', {}, two).station).toBe('skills')
+  expect(classify('mcp__third__read', {}, two).station).toBe('web')
+  // What the person sets wins over the mod's own route for a server it knows.
+  expect(classify('mcp__Claude_Browser__navigate', { url: 'https://a.b/c' }, setupFrom({ serverStations: ['Claude_Browser=web'] }))).toEqual({ station: 'web', label: 'Claude_Browser: navigate' })
+  // The server's resources follow it.
+  expect(classify('ReadMcpResourceTool', { server: 'srv', uri: 'private://x' }, put('files'))).toEqual({ station: 'files', label: 'ReadMcpResourceTool' })
+})
+
+test('serverStations ignores an entry whose station is unknown, or is memory, the model or hooks', () => {
+  const odd = setupFrom({ serverStations: ['a=nowhere', 'b=memory', 'c=model', 'd=hooks', 'e=', '=files', 'no-equals', 'f=files'] })
+  expect([...odd.serverStations]).toEqual([['f', 'files']])
+  expect(classify('mcp__a__x', {}, odd).station).toBe('web')
+  expect(classify('mcp__b__x', {}, odd).station).toBe('web')
+  expect(setupFrom({}).serverStations.size).toBe(0)
+  expect(setupFrom({ serverStations: 7 }).serverStations.size).toBe(0)
+})
+
+test('a server named in memoryServers and in serverStations goes to Memory', () => {
+  const both = setupFrom({ memoryServers: ['recall'], serverStations: ['recall=files'] })
+  expect(classify('mcp__recall__search', {}, both)).toEqual({ station: 'memory', label: 'search' })
+  expect(classify('ReadMcpResourceTool', { server: 'recall' }, both).station).toBe('memory')
+})
+
 test('labels never carry what was written or searched', () => {
   const label = (tool: string, input: Record<string, unknown>) => classify(tool, input, SETUP).label
   expect(label('Read', { file_path: '/a/b/c/content.py' })).toBe('c/content.py')
@@ -390,6 +422,15 @@ for (const [language, row] of [['es', 'Archivos  b/content.py'], ['fr', 'Fichier
   })
 }
 
+test('paneBackground is the theme\'s unless it is transparent or a colour', () => {
+  expect(setupFrom({}).paneBackground).toBe('theme')
+  expect(setupFrom({ paneBackground: 'transparent' }).paneBackground).toBe('transparent')
+  expect(setupFrom({ paneBackground: ' Transparent ' }).paneBackground).toBe('transparent')
+  expect(setupFrom({ paneBackground: '#0A0F1A' }).paneBackground).toBe('#0a0f1a')
+  expect(setupFrom({ paneBackground: '#abc' }).paneBackground).toBe('#aabbcc')
+  for (const odd of ['clear', 'red', '#12345', 'rgb(1,2,3)', '', 7, true]) expect(setupFrom({ paneBackground: odd }).paneBackground).toBe('theme')
+})
+
 test('options that make no sense count as not set', () => {
   const odd = setupFrom({ language: 'xx', coreName: '   ', memoryServers: 7, memoryLabels: ['no-equals', '=x', 'y='], hookRecords: 'yes' })
   expect(odd.t.idle).toBe(stringsFor('en').idle)
@@ -456,6 +497,36 @@ test('with no options set the map speaks English and shows no record numbers', a
   }
 })
 
+// The pane's background as the engine is asked for it, by what `paneBackground` says.
+async function openedWith(...[$, on]: Parameters<TestBody>): Promise<unknown[]> {
+  const asked: unknown[] = []
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('command.register', () => ({ value: { command: 'lot-map' } }))
+  on('ui.open', (_, e) => {
+    asked.push('backgroundColor' in e ? e.backgroundColor : 'none')
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  return asked
+}
+
+test('by default the pane is opened without a background of its own', async ($, on) => {
+  expect(await openedWith($, on)).toEqual(['none'])
+})
+
+test('paneBackground transparent opens the pane transparent', { options: { paneBackground: 'transparent' } }, async ($, on) => {
+  expect(await openedWith($, on)).toEqual(['transparent'])
+})
+
+test('paneBackground #rrggbb opens the pane in that colour', { options: { paneBackground: '#0A0F1A' } }, async ($, on) => {
+  expect(await openedWith($, on)).toEqual(['#0a0f1a'])
+})
+
+test('an unknown paneBackground keeps the theme\'s', { options: { paneBackground: 'clear' } }, async ($, on) => {
+  expect(await openedWith($, on)).toEqual(['none'])
+})
+
 test('a call shows on the pane, on every surface', { options: OWN }, async ($, on) => {
   on('clock.now', () => ({ value: 1_000_000 }))
   on('command.register', () => ({ value: { command: 'lot-map' } }))
@@ -477,14 +548,37 @@ test('a call a settings hook refused reads as blocked, with the hook lit and its
   on('clock.now', () => ({ value: 1_000_000 }))
   on('classic.PreToolUse', () => ({ deny: 'JUDGE: found key sk-private\nCommand: secret' }))
   on('tool.call', () => ({ result: {} }))
+  let kept: Board = { entries: [], counts: {} }
+  on('state.set', ((_: unknown, e: { value?: { value?: Board } }, next: (e: unknown) => unknown) => ((kept = e.value?.value ?? kept), next(e))) as never)
 
   await $.tool.call({ tool: 'Bash', command: 'git status', description: 'Показать статус' })
+
+  expect(kept.entries.filter(e => e.station === 'shell').map(e => e.status)).toEqual(['block'])
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /остановил Bash/ }))?.text).toContain('Хуки')
   expect((await ui.find({ type: 'Text', text: /Показать статус/ }))?.text).toContain('✕')
   expect(await ui.find({ type: 'Text', text: /JUDGE|sk-private|secret/ })).toBeUndefined()
   await ui.unmount()
+})
+
+test('what is remembered between two events is held to a count, the oldest dropped first', () => {
+  // A refusal waits for its call, a subagent's name for its steps: either may never come, and neither may stay for good.
+  const refused = new Set<string>()
+  for (let i = 0; i < 100; i++) {
+    refused.add(`call-${i}`)
+    keepNewest(refused, 64)
+  }
+  expect(refused.size).toBe(64)
+  expect(refused.has('call-35')).toBe(false)
+  expect(refused.has('call-36')).toBe(true)
+  expect(refused.has('call-99')).toBe(true)
+  const crew = new Map([['a', 'one'], ['b', 'two'], ['c', 'three']])
+  keepNewest(crew, 2)
+  expect([...crew.keys()]).toEqual(['b', 'c'])
+  // Under the count nothing goes.
+  keepNewest(crew, 2)
+  expect(crew.size).toBe(2)
 })
 
 test('with hookReasons on, the first line of a refusal shows and the rest does not', { options: { ...OWN, hookReasons: true } }, async ($, on) => {
@@ -1340,6 +1434,42 @@ test('a command handed to a shell, to eval or to watch is the command that count
   expect(stationOf(`bash -c "bash -c 'bash -c \\"bash -c curl\\"'"`)).not.toBe('files')
 })
 
+test('what parts two commands parts them only outside quotes', () => {
+  // A pattern, a script or a filter with `|` or `;` in it is one argument of a command that works on files.
+  for (const c of ['grep -E "ssh|curl" log.txt', 'grep -rn "foo|bar" src', 'rg "push|pull" .', 'sed "s/a/b/; s/curl/x/" f', "awk '{print $1; }' f", "jq '.a | .b' f.json", 'cat f | grep -E "wget|nc"', `bash -c "grep -E 'a|b' f"`, 'find . -name "*.ts" -exec grep -l "a|b" {} \\;', "find . -exec grep -l 'a;b' {} ';'"]) {
+    expect([c, stationOf(c)]).toEqual([c, 'files'])
+  }
+  // Text that names a network command runs none.
+  for (const c of ['git commit -m "fix: retry; curl fallback"', 'echo "a; wget b"', 'echo "for u; do curl; done"', `echo "it's; curl"`, 'echo "a \\" ; curl x"', 'echo a\\; curl', "echo $'it\\'s; curl x'", 'make # then; curl x', "make # don't; curl x"]) {
+    expect([c, stationOf(c)]).toEqual([c, 'shell'])
+  }
+  // Outside the quotes the same characters still part commands, and a command after a comment's line is read.
+  for (const c of ['grep "a" f && curl x', 'echo "a"; curl x', "make # don't\ncurl x", 'echo a\\\\; curl x', 'bash -c "echo \\"hi\\"; curl x"', 'sleep 5 & curl x', 'make |& curl -T - x']) {
+    expect([c, stationOf(c)]).toEqual([c, 'web'])
+  }
+  // Sending output somewhere ends no command, and a backslash at a line's end joins two lines.
+  expect(stationOf('ls a 2>&1')).toBe('files')
+  expect(stationOf('ls a &> out.txt')).toBe('files')
+  expect(stationOf('git \\\n  push origin main')).toBe('web')
+  // Double quotes do not stop a command inside them from running; single quotes do.
+  expect(stationOf('echo "$(curl x)"')).toBe('web')
+  expect(stationOf('echo "now `curl x` done"')).toBe('web')
+  expect(stationOf('git commit -m "$(date); $(curl x)"')).toBe('web')
+  expect(stationOf("echo '$(curl x)'")).toBe('shell')
+  expect(stationOf("echo '`curl x`'")).toBe('shell')
+  // The text beside a command run inside quotes is still text.
+  expect(stationOf('echo "$(date) curl x"')).toBe('shell')
+  // A line handed to a shell in single quotes is run by that shell, and what it runs inside is found.
+  expect(stationOf("bash -c 'echo $(curl x)'")).toBe('web')
+  expect(stationOf('case $1 in a) curl x ;; esac')).toBe('web')
+  // PowerShell: a backslash is a path's, and a backtick keeps the character after it.
+  expect(stationOf('Select-String "a|b" f.txt', 'PowerShell')).toBe('files')
+  expect(stationOf('Write-Host "a; curl b"', 'PowerShell')).toBe('shell')
+  expect(stationOf('Get-Content "C:\\dir\\"; curl x', 'PowerShell')).toBe('web')
+  expect(stationOf('Write-Host a`; curl', 'PowerShell')).toBe('shell')
+  expect(stationOf('& "C:\\Program Files\\Git\\cmd\\git.exe" push', 'PowerShell')).toBe('web')
+})
+
 test('the text of a here-document is no command, whatever it says', () => {
   expect(stationOf('cat <<EOF > f\ncurl x\nEOF')).toBe('files')
   expect(stationOf("cat <<'EOF' > notes.md\nsome text\nwget y\nEOF")).toBe('files')
@@ -1355,6 +1485,32 @@ test('the text of a here-document is no command, whatever it says', () => {
   expect(stationOf('echo $((1 << 2)); curl x')).toBe('web')
   // PowerShell has no here-documents of this kind.
   expect(stationOf('Get-Content a.txt', 'PowerShell')).toBe('files')
+})
+
+test('a here-document handed to a shell is that shell\'s script', () => {
+  for (const c of ['bash <<EOF\ncurl x\nEOF', "bash -s <<'EOF'\nset -e\nwget y\nEOF", 'sudo sh <<EOF\napt-get update\nEOF', 'echo start && zsh <<-EOF\n\tgit push\n\tEOF', 'bash <<EOF\necho hi']) {
+    if (c.endsWith('hi')) expect([c, stationOf(c)]).toEqual([c, 'shell'])
+    else expect([c, stationOf(c)]).toEqual([c, 'web'])
+  }
+  // The word that ends it is no command, and what follows is read as before.
+  expect(stationOf('bash <<EOF\necho hi\nEOF')).toBe('shell')
+  expect(stationOf('bash <<EOF\necho hi\nEOF\ncurl x')).toBe('web')
+  // A shell that was given a script, or a line with -c, reads the here-document as that script's input: text.
+  expect(stationOf('bash deploy.sh <<EOF\ncurl x\nEOF')).toBe('shell')
+  expect(stationOf('bash -c "cat > f" <<EOF\ncurl x\nEOF')).toBe('files')
+  // Another language's script is not read, and neither is text piped on to a shell.
+  expect(stationOf('python3 - <<PY\nimport os\ncurl = 1\nPY')).toBe('shell')
+  expect(stationOf('cat <<EOF | bash\ncurl x\nEOF')).toBe('shell')
+})
+
+test('the command docker runs in a container is the command that counts', () => {
+  for (const c of ['docker exec c curl x', 'docker exec -it -u root c curl x', 'docker run alpine wget x', 'docker run --rm -v "$PWD:/w" -w /w alpine wget x', 'docker run --rm alpine sh -c "curl x"', 'docker compose exec web curl x', 'docker compose run --rm web npm install', 'docker -H tcp://h:2375 exec c curl y', 'docker container exec c ping h', 'sudo docker exec c curl x']) {
+    expect([c, stationOf(c)]).toEqual([c, 'web'])
+  }
+  // A name or a value that reads like a command is not one, and a command that stays in the container is Shell.
+  for (const c of ['docker exec c ls', 'docker run --name curl alpine ls', 'docker run -e A=1 --network=host img git status', 'docker run alpine', 'docker ps', 'docker exec c cat /etc/hosts', 'docker logs curl']) {
+    expect([c, stationOf(c)]).toEqual([c, 'shell'])
+  }
 })
 
 test('a command line is read up to a length, and a long one costs no more than that', () => {
@@ -1405,4 +1561,75 @@ test('a running row is in a colour of its own, apart from the colour of a failed
   expect(running?.props.color).toBe('ide')
   expect(failed?.props.color).toBe('error')
   await ui.unmount()
+})
+
+test('guardedHooks is on unless switched off, in either spelling', () => {
+  expect(setupFrom({}).guardedHooks).toBe(true)
+  expect(setupFrom({ guardedHooks: 'nonsense' }).guardedHooks).toBe(true)
+  expect(setupFrom({ guardedHooks: false }).guardedHooks).toBe(false)
+  expect(setupFrom({ guardedHooks: 'false' }).guardedHooks).toBe(false)
+})
+
+test('with guardedHooks off a call a hook refused reads as failed, and no hook of the five leaves a row', { options: { ...OWN, guardedHooks: false } }, async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('classic.PreToolUse', () => ({ deny: 'JUDGE: found key sk-private\nCommand: secret' }))
+  on('classic.UserPromptSubmit', () => ({ additionalContext: ['• [#1971 excerpt] тайный текст записи'] }))
+  on('classic.SessionStart', () => ({ additionalContext: ['• [#277 excerpt] ещё'] }))
+  on('skill.prompt', (_, e) => ({ text: e.text }) as never)
+  on('session.compact', () => ({ skip: 'test' }) as never)
+  on('tool.call', () => ({ result: {} }))
+  let kept: Board = { entries: [], counts: {} }
+  on('state.set', ((_: unknown, e: { value?: { value?: Board } }, next: (e: unknown) => unknown) => ((kept = e.value?.value ?? kept), next(e))) as never)
+
+  await $.classic.SessionStart({ source: 'startup' } as never)
+  await $.classic.UserPromptSubmit({ prompt: 'привет', permission_mode: 'default' } as never)
+  await $.skill.prompt({ skill: 'deploy', text: '' } as never)
+  await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'kept', toolUses: [] }] } as never)
+  await $.tool.call({ tool: 'Bash', command: 'git status', description: 'Показать статус' })
+
+  // The mark is the same for a blocked call and for a failed one, so the row's own status is read. Without its
+  // hook on classic.PreToolUse the mod cannot tell a refusal from an error: the call comes back as an error.
+  expect(kept.entries.filter(e => e.station === 'shell').map(e => e.status)).toEqual(['err'])
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /Показать статус/ }))?.text).toContain('✕')
+  expect(await ui.find({ type: 'Text', text: /Хуки|deploy|#1971|#277|JUDGE|sk-private/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: new RegExp(SETUP.t.compacting) })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('with no surface attached at the start the pane is not opened; it opens when a surface joins', async ($, on) => {
+  let opens = 0
+  let roster: string[] = []
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('command.register', () => ({ value: { command: 'lot-map' } }))
+  on('session.surfaces', () => ({ value: roster }) as never)
+  on('ui.open', () => {
+    opens++
+    return { value: roster.length > 0 ? { isPlaced: true } : { isPlaced: false, reason: 'no-surface' } } as never
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.attach', (_, e) => ({ clientId: e.clientId }) as never)
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(opens).toBe(0)
+
+  roster = ['desktop']
+  await $.session.attach({ clientId: 'c1', surface: 'desktop' } as never)
+  expect(opens).toBe(1)
+})
+
+test('with a surface attached at the start the pane is opened at once', async ($, on) => {
+  let opens = 0
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('command.register', () => ({ value: { command: 'lot-map' } }))
+  on('session.surfaces', () => ({ value: ['terminal'] }) as never)
+  on('ui.open', () => {
+    opens++
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(opens).toBe(1)
 })

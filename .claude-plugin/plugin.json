@@ -1,6 +1,6 @@
 {
   "name": "lot-map",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "A live map beside the chat: memory, files, shell, web, model, agents, skills and hooks light up as they are used",
   "author": {
     "name": "Aleksei Volodin",
@@ -73,6 +73,13 @@
       "default": [],
       "description": "Short names for memory tools, each written as tool=name. A tool without one goes by its own name."
     },
+    "serverStations": {
+      "type": "string",
+      "multiple": true,
+      "title": "Servers on a station",
+      "default": [],
+      "description": "Put an MCP server's tools on a station of the map, each written as server=station. The stations are files, shell, web, browser, agents, skills and you. Memory keeps memoryServers, which wins if a server is in both. A server without an entry, or with an unknown station, goes where the mod puts it."
+    },
     "hookRecords": {
       "type": "boolean",
       "title": "Hooks add numbered records",
@@ -84,6 +91,12 @@
       "title": "Show why a hook refused",
       "default": false,
       "description": "Show the first line of a hook's refusal, up to 72 characters. Off, the map says only which tool was stopped: a refusal may quote what the hook found."
+    },
+    "guardedHooks": {
+      "type": "boolean",
+      "title": "Hooks a guard skips",
+      "default": true,
+      "description": "Turn off on a Team or Enterprise login where the transcript gets notices that a lot-map hook was skipped. The map then loses the Hooks station, the records a hook adds, the row of a typed slash command and the mark of a compaction; everything else stays."
     },
     "subagentNames": {
       "type": "boolean",
@@ -117,6 +130,12 @@
       ],
       "default": "solid",
       "description": "The map's own background, or transparent, which lets the pane behind it show through."
+    },
+    "paneBackground": {
+      "type": "string",
+      "title": "Pane background",
+      "default": "theme",
+      "description": "What the pane is painted with: theme, Claude Code's own; transparent, which lets the terminal behind it show through; or a colour written as #rrggbb."
     },
     "colors": {
       "type": "string",
