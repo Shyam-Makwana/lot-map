@@ -555,7 +555,10 @@ export function shortModel(model: string): string {
 }
 
 export function formatMs(ms: number, t: Strings): string {
-  return ms < 1000 ? t.ms(Math.max(1, Math.round(ms))) : ms < 60000 ? t.seconds((ms / 1000).toFixed(1)) : t.minutes(Math.floor(ms / 60000), Math.round((ms % 60000) / 1000))
+  // Rounded before the unit is chosen, so that no part reaches the size of the next unit: never `1 min 60 s`.
+  const tenths = Math.round(ms / 100)
+  const seconds = Math.round(ms / 1000)
+  return Math.round(ms) < 1000 ? t.ms(Math.max(1, Math.round(ms))) : tenths < 600 ? t.seconds((tenths / 10).toFixed(1)) : t.minutes(Math.floor(seconds / 60), seconds % 60)
 }
 
 /**
