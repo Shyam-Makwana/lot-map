@@ -363,6 +363,16 @@ test('a label loses what a terminal would act on', () => {
   expect(clean('я'.repeat(200)).length).toBe(120)
 })
 
+test('a time never shows a part as large as the next unit: no `1000 ms`, `60.0 s` or `1 min 60 s`', () => {
+  const t = stringsFor('en')
+  expect(formatMs(999.6, t)).toBe('1.0 s')
+  expect(formatMs(59_940, t)).toBe('59.9 s')
+  expect(formatMs(59_960, t)).toBe('1 min 0 s')
+  expect(formatMs(89_400, t)).toBe('1 min 29 s')
+  expect(formatMs(119_500, t)).toBe('2 min 0 s')
+  expect(formatMs(3_599_999, t)).toBe('60 min 0 s')
+})
+
 test('hook helpers', () => {
   expect(memoryIds('• [#1971 excerpt] and [now #45] and [todo #3] and [#1971 again]')).toEqual(['1971', '45', '3'])
   expect(firstLine('\nBlocked by x: rule.\nCommand: secret')).toBe('Blocked by x: rule.')
